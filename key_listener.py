@@ -55,6 +55,11 @@ class KeyListener:
         if event_type != Quartz.kCGEventKeyDown:
             return event
 
+        # Ignore Cmd+key combinations (e.g. our own Cmd+V paste)
+        flags = Quartz.CGEventGetFlags(event)
+        if flags & Quartz.kCGEventFlagMaskCommand:
+            return event
+
         keycode = Quartz.CGEventGetIntegerValueField(event, Quartz.kCGKeyboardEventKeycode)
         char = _keycode_to_char(event)
 
@@ -67,16 +72,14 @@ class KeyListener:
             self.word_buffer.clear()
 
             if needs_fix:
-                # Switch layout on main thread (we're in CFRunLoop callback = main thread)
                 switch_layout_tis(lang)
-                # Replace word in background (needs delay for clipboard)
                 threading.Thread(
                     target=replace_word,
                     args=(word, correct_word),
                     daemon=True,
                 ).start()
         elif char == '\x08' or keycode == 51:
-            # Backspace
+            # Backspace — safe to call on empty buffer (no-op)
             self.word_buffer.pop()
         elif char in PUNCTUATION:
             self.word_buffer.clear()
