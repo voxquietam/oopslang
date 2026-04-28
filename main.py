@@ -1,0 +1,38 @@
+"""
+oopslang — auto-correct wrong keyboard layout on macOS.
+Detects when words are typed in the wrong layout and fixes them on Space.
+
+Requires: Accessibility permission in System Settings -> Privacy & Security -> Accessibility.
+"""
+
+import signal
+import sys
+
+from dictionary import load_dictionaries
+from word_detector import WordBuffer
+from key_listener import KeyListener
+
+
+def main():
+    print('oopslang starting...')
+
+    dictionaries = load_dictionaries()
+    word_buffer = WordBuffer(dictionaries)
+    listener = KeyListener(word_buffer)
+
+    def _shutdown(sig, frame):
+        print('\nStopping...')
+        listener.stop()
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, _shutdown)
+    signal.signal(signal.SIGTERM, _shutdown)
+
+    listener.start()
+    print('Listening. Press Ctrl+C to stop.')
+
+    signal.pause()
+
+
+if __name__ == '__main__':
+    main()
