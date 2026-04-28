@@ -6,7 +6,7 @@ Logic:
     First match wins.
 """
 
-from keymap import transliterate
+from keymap import transliterate, transliterate_to_en
 
 SEPARATORS = {' ', '\n', '\r', '\t'}
 PUNCTUATION = {'.', ',', '!', '?', ';', ':', '-', '(', ')', '"', "'"}
@@ -40,12 +40,22 @@ class WordBuffer:
         if not word:
             return False, '', ''
 
+        en_words = self.dictionaries.get('en', set())
+
         for lang, words in self.dictionaries.items():
             if word.lower() in words:
                 return False, '', ''
 
-            converted = transliterate(word, lang)
-            if converted != word and converted.lower() in words:
-                return True, converted, lang
+            # EN layout → lang (e.g. ghbdtn → привет)
+            if lang != 'en':
+                converted = transliterate(word, lang)
+                if converted != word and converted.lower() in words:
+                    return True, converted, lang
+
+            # lang layout → EN (e.g. руддщ → hello)
+            if lang != 'en' and en_words:
+                converted = transliterate_to_en(word, lang)
+                if converted != word and converted.lower() in en_words:
+                    return True, converted, 'en'
 
         return False, '', ''

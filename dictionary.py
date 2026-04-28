@@ -8,6 +8,23 @@ from pathlib import Path
 _DATA_DIR = Path(__file__).parent / 'data'
 
 _BUILTIN: dict[str, set[str]] = {
+    'en': {
+        'hello', 'world', 'yes', 'no', 'ok', 'okay', 'hi', 'bye', 'thanks', 'thank',
+        'the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 'can', 'her',
+        'was', 'one', 'our', 'out', 'day', 'get', 'has', 'him', 'his', 'how',
+        'its', 'new', 'now', 'old', 'see', 'two', 'who', 'did', 'let', 'put',
+        'say', 'she', 'too', 'use', 'way', 'may', 'any', 'big', 'end', 'far',
+        'few', 'got', 'own', 'try', 'why', 'ask', 'boy', 'came', 'come', 'does',
+        'each', 'from', 'give', 'good', 'have', 'here', 'high', 'just', 'know',
+        'last', 'left', 'like', 'long', 'look', 'make', 'more', 'much', 'must',
+        'name', 'next', 'only', 'open', 'over', 'part', 'same', 'seem', 'show',
+        'side', 'some', 'take', 'than', 'that', 'them', 'then', 'they', 'this',
+        'time', 'turn', 'very', 'want', 'well', 'went', 'were', 'what', 'when',
+        'with', 'work', 'your', 'also', 'back', 'been', 'both', 'call', 'down',
+        'even', 'find', 'first', 'hand', 'into', 'keep', 'kind', 'land', 'live',
+        'many', 'most', 'move', 'need', 'play', 'read', 'real', 'said', 'send',
+        'tell', 'text', 'them', 'used', 'walk', 'will', 'year', 'zero',
+    },
     'ru': {
         'привет', 'пока', 'да', 'нет', 'все', 'это', 'как', 'так', 'тут', 'там',
         'что', 'где', 'кто', 'нас', 'вас', 'мне', 'вам', 'ему', 'ей', 'они',

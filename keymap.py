@@ -44,5 +44,12 @@ LAYOUTS: dict[str, dict[str, str]] = {
 
 
 def transliterate(text: str, lang: str) -> str:
+    """Convert text from EN layout to target lang layout."""
     mapping = LAYOUTS.get(lang, {})
+    return ''.join(mapping.get(ch, ch) for ch in text)
+
+
+def transliterate_to_en(text: str, lang: str) -> str:
+    """Convert text from lang layout back to EN."""
+    mapping = {v: k for k, v in LAYOUTS.get(lang, {}).items()}
     return ''.join(mapping.get(ch, ch) for ch in text)
