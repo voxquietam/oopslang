@@ -15,6 +15,12 @@ SEPARATORS = {' ', '\n', '\r', '\t'}
 # Chars like ' , . ; are excluded because they map to Cyrillic letters (э, б, ю, ж).
 PUNCTUATION = {'!', '?', ':', '-', '(', ')', '"'}
 
+# Characters exclusive to one Cyrillic language — strong layout signal.
+_LANG_EXCLUSIVE: dict[str, frozenset[str]] = {
+    'ru': frozenset('ыъэЫЪЭ'),
+    'uk': frozenset('іїєІЇЄ'),
+}
+
 _LANGS = ['ru', 'uk']
 
 
@@ -51,14 +57,16 @@ class WordBuffer:
         return self._check_long(word)
 
     def _check_short(self, word: str) -> tuple[bool, str, str]:
+        candidates: list[tuple[float, str, str]] = []
+
         for lang in _LANGS:
             converted = transliterate(word, lang)
             if converted != word and should_convert(word, converted, lang, 'en'):
-                return True, converted, lang
+                candidates.append((score(converted, lang), converted, lang))
 
             converted_en = transliterate_to_en(word, lang)
             if converted_en != word and should_convert(word, converted_en, 'en', lang):
-                return True, converted_en, 'en'
+                candidates.append((score(converted_en, 'en'), converted_en, 'en'))
 
         # Cross-layout: e.g. RU→UK or UK→RU
         for from_lang in _LANGS:
@@ -66,8 +74,21 @@ class WordBuffer:
                 if from_lang == to_lang:
                     continue
                 converted = transliterate_cross(word, from_lang, to_lang)
-                if converted != word and should_convert(word, converted, to_lang, from_lang):
-                    return True, converted, to_lang
+                if converted == word:
+                    continue
+                if should_convert(word, converted, to_lang, from_lang):
+                    candidates.append((score(converted, to_lang), converted, to_lang))
+                elif (is_known_word(word, from_lang)
+                      and is_known_word(converted, to_lang)
+                      and _LANG_EXCLUSIVE.get(to_lang, frozenset()).intersection(converted)):
+                    # Converted word contains chars exclusive to target lang (e.g. ы→ru).
+                    # This is a reliable signal regardless of bigram scores.
+                    candidates.append((score(converted, to_lang), converted, to_lang))
+
+        if candidates:
+            candidates.sort(key=lambda x: x[0], reverse=True)
+            _, best_word, best_lang = candidates[0]
+            return True, best_word, best_lang
 
         return False, '', ''
 
@@ -95,10 +116,17 @@ class WordBuffer:
                 if from_lang == to_lang:
                     continue
                 converted = transliterate_cross(word, from_lang, to_lang)
-                if converted != word and should_convert(word, converted, to_lang, from_lang):
+                if converted == word:
+                    continue
+                if should_convert(word, converted, to_lang, from_lang):
                     gain = score(converted, to_lang) - score(word, from_lang)
                     if gain > best_gain:
                         best_gain, best_word, best_lang = gain, converted, to_lang
+                elif not best_word and is_known_word(converted, to_lang):
+                    if (not is_known_word(word, from_lang)
+                            or _LANG_EXCLUSIVE.get(to_lang, frozenset()).intersection(converted)):
+                        # Dictionary confirms target, or converted has lang-exclusive chars.
+                        best_word, best_lang = converted, to_lang
 
         if best_word:
             # Dictionary tiebreak: if bigrams picked lang X but only lang Y's dictionary
