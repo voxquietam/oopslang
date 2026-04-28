@@ -66,6 +66,8 @@ class KeyListener:
 
         keycode = Quartz.CGEventGetIntegerValueField(event, Quartz.kCGKeyboardEventKeycode)
         char = keycode_to_char(keycode) or _keycode_to_char(event)
+        if char and (flags & Quartz.kCGEventFlagMaskShift):
+            char = char.upper()
 
         if char is None:
             return event
