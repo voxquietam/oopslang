@@ -8,7 +8,6 @@ Requires: Accessibility permission in System Settings -> Privacy & Security -> A
 import signal
 import sys
 
-from dictionary import load_dictionaries
 from word_detector import WordBuffer
 from key_listener import KeyListener
 
@@ -16,8 +15,7 @@ from key_listener import KeyListener
 def main():
     print('oopslang starting...')
 
-    dictionaries = load_dictionaries()
-    word_buffer = WordBuffer(dictionaries)
+    word_buffer = WordBuffer()
     listener = KeyListener(word_buffer)
 
     def _shutdown(sig, frame):

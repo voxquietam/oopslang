@@ -2,19 +2,21 @@
 Current word buffer + wrong layout detection.
 Logic:
   - Accumulate characters since the last separator (space, newline, punctuation).
-  - On space: try converting the word via each language's mapping and check its dictionary.
-    First match wins.
+  - On space: score the word in each language using bigram frequencies.
+    If the converted version scores higher than the original → wrong layout.
 """
 
 from keymap import transliterate, transliterate_to_en
+from scorer import should_convert
 
 SEPARATORS = {' ', '\n', '\r', '\t'}
 PUNCTUATION = {'.', ',', '!', '?', ';', ':', '-', '(', ')', '"', "'"}
 
+_LANGS = ['ru', 'uk']
+
 
 class WordBuffer:
-    def __init__(self, dictionaries: dict[str, set[str]]):
-        self.dictionaries = dictionaries  # {lang: set_of_words}
+    def __init__(self):
         self._buffer: list[str] = []
 
     def push(self, char: str) -> None:
@@ -33,29 +35,22 @@ class WordBuffer:
 
     def check_wrong_layout(self) -> tuple[bool, str, str]:
         """
-        Returns (needs_correction, correct_word, lang).
-        Tries all loaded languages. First match wins.
+        Returns (needs_correction, correct_word, target_lang).
+        Tries EN→lang and lang→EN for all supported languages.
         """
         word = self.word
         if not word:
             return False, '', ''
 
-        en_words = self.dictionaries.get('en', set())
-
-        for lang, words in self.dictionaries.items():
-            if word.lower() in words:
-                return False, '', ''
-
+        for lang in _LANGS:
             # EN layout → lang (e.g. ghbdtn → привет)
-            if lang != 'en':
-                converted = transliterate(word, lang)
-                if converted != word and converted.lower() in words:
-                    return True, converted, lang
+            converted = transliterate(word, lang)
+            if converted != word and should_convert(word, converted, lang, 'en'):
+                return True, converted, lang
 
             # lang layout → EN (e.g. руддщ → hello)
-            if lang != 'en' and en_words:
-                converted = transliterate_to_en(word, lang)
-                if converted != word and converted.lower() in en_words:
-                    return True, converted, 'en'
+            converted_en = transliterate_to_en(word, lang)
+            if converted_en != word and should_convert(word, converted_en, 'en', lang):
+                return True, converted_en, 'en'
 
         return False, '', ''
