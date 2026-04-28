@@ -8,4 +8,4 @@ build/
 venv/
 .DS_Store
 *.log
-data/bigrams.json
+build_bigrams.py
