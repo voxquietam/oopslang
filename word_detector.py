@@ -13,7 +13,7 @@ from scorer import should_convert, score, is_known_word, SHORT_WORD_MAX_LEN
 SEPARATORS = {' ', '\n', '\r', '\t'}
 # Only chars that cannot be part of a mistyped word.
 # Chars like ' , . ; are excluded because they map to Cyrillic letters (э, б, ю, ж).
-PUNCTUATION = {'!', '?', ':', '-', '(', ')', '"'}
+PUNCTUATION = {'!', '?', ':', '-', '(', ')', '"', ',', '.', ';', "'"}
 
 # Characters exclusive to one Cyrillic language — strong layout signal.
 _LANG_EXCLUSIVE: dict[str, frozenset[str]] = {
