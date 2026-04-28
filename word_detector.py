@@ -99,7 +99,9 @@ class WordBuffer:
 
         for lang in _LANGS:
             converted = transliterate(word, lang)
-            if converted != word and should_convert(word, converted, lang, 'en'):
+            if (converted != word
+                    and should_convert(word, converted, lang, 'en')
+                    and is_known_word(converted, lang)):
                 gain = score(converted, lang) - score(word, 'en')
                 if gain > best_gain:
                     best_gain, best_word, best_lang = gain, converted, lang
@@ -118,7 +120,8 @@ class WordBuffer:
                 converted = transliterate_cross(word, from_lang, to_lang)
                 if converted == word:
                     continue
-                if should_convert(word, converted, to_lang, from_lang):
+                if (should_convert(word, converted, to_lang, from_lang)
+                        and is_known_word(converted, to_lang)):
                     gain = score(converted, to_lang) - score(word, from_lang)
                     if gain > best_gain:
                         best_gain, best_word, best_lang = gain, converted, to_lang
