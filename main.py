@@ -28,10 +28,8 @@ def main():
     signal.signal(signal.SIGINT, _shutdown)
     signal.signal(signal.SIGTERM, _shutdown)
 
-    listener.start()
     print('Listening. Press Ctrl+C to stop.')
-
-    signal.pause()
+    listener.run()  # blocks main thread with CFRunLoopRun
 
 
 if __name__ == '__main__':

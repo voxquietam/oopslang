@@ -1,36 +1,25 @@
 """
 Global keyboard event listener via CGEventTap (Core Graphics).
 Requires Accessibility permission: System Settings -> Privacy & Security -> Accessibility.
+
+Must be run on the main thread so that TISSelectInputSource works correctly.
 """
 
 import threading
-from typing import Callable
 
 import Quartz
 from word_detector import WordBuffer, SEPARATORS, PUNCTUATION
 from text_replacer import replace_word
-
-
-# CGEventTap callback type
-EventCallback = Callable[[str, bool], None]
+from layout_switcher import switch_layout_tis
 
 
 class KeyListener:
     def __init__(self, word_buffer: WordBuffer):
         self.word_buffer = word_buffer
         self._tap = None
-        self._run_loop_source = None
-        self._thread = None
 
-    def start(self) -> None:
-        self._thread = threading.Thread(target=self._run, daemon=True)
-        self._thread.start()
-
-    def stop(self) -> None:
-        if self._tap:
-            Quartz.CGEventTapEnable(self._tap, False)
-
-    def _run(self) -> None:
+    def run(self) -> None:
+        """Start listening. Blocks the calling thread (must be main thread)."""
         tap = Quartz.CGEventTapCreate(
             Quartz.kCGSessionEventTap,
             Quartz.kCGHeadInsertEventTap,
@@ -57,6 +46,11 @@ class KeyListener:
         Quartz.CGEventTapEnable(tap, True)
         Quartz.CFRunLoopRun()
 
+    def stop(self) -> None:
+        if self._tap:
+            Quartz.CGEventTapEnable(self._tap, False)
+        Quartz.CFRunLoopStop(Quartz.CFRunLoopGetMain())
+
     def _callback(self, proxy, event_type, event, refcon):
         if event_type != Quartz.kCGEventKeyDown:
             return event
@@ -68,13 +62,14 @@ class KeyListener:
             return event
 
         if char in SEPARATORS:
-            # Space or newline — check if word needs correction
             word = self.word_buffer.word
-            needs_fix, correct_word = self.word_buffer.check_wrong_layout()
+            needs_fix, correct_word, lang = self.word_buffer.check_wrong_layout()
             self.word_buffer.clear()
 
             if needs_fix:
-                # Let the space event pass through first, then replace
+                # Switch layout on main thread (we're in CFRunLoop callback = main thread)
+                switch_layout_tis(lang)
+                # Replace word in background (needs delay for clipboard)
                 threading.Thread(
                     target=replace_word,
                     args=(word, correct_word),

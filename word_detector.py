@@ -31,21 +31,21 @@ class WordBuffer:
     def word(self) -> str:
         return ''.join(self._buffer)
 
-    def check_wrong_layout(self) -> tuple[bool, str]:
+    def check_wrong_layout(self) -> tuple[bool, str, str]:
         """
-        Returns (needs_correction, correct_word).
+        Returns (needs_correction, correct_word, lang).
         Tries all loaded languages. First match wins.
         """
         word = self.word
         if not word:
-            return False, ''
+            return False, '', ''
 
         for lang, words in self.dictionaries.items():
             if word.lower() in words:
-                return False, ''
+                return False, '', ''
 
             converted = transliterate(word, lang)
             if converted != word and converted.lower() in words:
-                return True, converted
+                return True, converted, lang
 
-        return False, ''
+        return False, '', ''

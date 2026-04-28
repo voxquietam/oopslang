@@ -1,97 +1,91 @@
 """
-Layout switching via TIS (Text Input Source) from the Carbon framework.
+Layout switching via TIS (Text Input Source) API using pure ctypes.
 """
 
-import subprocess
+import ctypes
+import ctypes.util
+
+_carbon = None
+
+_LANG_TO_IDS: dict[str, list[bytes]] = {
+    'ru': [b'com.apple.keylayout.Russian', b'com.apple.keylayout.Russian-PC', b'com.apple.keylayout.RussianWin'],
+    'uk': [b'com.apple.keylayout.Ukrainian', b'com.apple.keylayout.Ukrainian-PC'],
+    'en': [b'com.apple.keylayout.ABC', b'com.apple.keylayout.US'],
+}
+
+_kCFStringEncodingUTF8 = 0x08000100
 
 
-def get_current_layout() -> str:
-    """Returns the current layout identifier, e.g. 'com.apple.keylayout.Russian'."""
-    try:
-        import Cocoa  # noqa: F401
-        from Foundation import NSBundle  # noqa: F401
-        result = subprocess.run(
-            ['defaults', 'read', 'com.apple.HIToolbox', 'AppleCurrentKeyboardLayoutInputSourceID'],
-            capture_output=True, text=True
-        )
-        return result.stdout.strip()
-    except Exception:
-        return ''
+def _get_carbon() -> ctypes.CDLL | None:
+    global _carbon
+    if _carbon is not None:
+        return _carbon
+    path = ctypes.util.find_library('Carbon')
+    if not path:
+        return None
+    lib = ctypes.cdll.LoadLibrary(path)
+
+    lib.TISCreateInputSourceList.restype = ctypes.c_void_p
+    lib.TISCreateInputSourceList.argtypes = [ctypes.c_void_p, ctypes.c_bool]
+
+    lib.CFArrayGetCount.restype = ctypes.c_long
+    lib.CFArrayGetCount.argtypes = [ctypes.c_void_p]
+
+    lib.CFArrayGetValueAtIndex.restype = ctypes.c_void_p
+    lib.CFArrayGetValueAtIndex.argtypes = [ctypes.c_void_p, ctypes.c_long]
+
+    lib.TISGetInputSourceProperty.restype = ctypes.c_void_p
+    lib.TISGetInputSourceProperty.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+
+    lib.TISSelectInputSource.restype = ctypes.c_int
+    lib.TISSelectInputSource.argtypes = [ctypes.c_void_p]
+
+    lib.CFStringCreateWithCString.restype = ctypes.c_void_p
+    lib.CFStringCreateWithCString.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_uint32]
+
+    lib.CFStringGetCString.restype = ctypes.c_bool
+    lib.CFStringGetCString.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_long, ctypes.c_uint32]
+
+    lib.CFRelease.restype = None
+    lib.CFRelease.argtypes = [ctypes.c_void_p]
+
+    _carbon = lib
+    return _carbon
 
 
-def switch_to_layout(layout_id: str) -> bool:
-    """
-    Switches layout via AppleScript (reliable fallback, no code signing required).
-    layout_id: e.g. 'Russian' or 'ABC'
-    """
-    script = f'''
-    tell application "System Events"
-        tell process "SystemUIServer"
-            tell menu bar item 1 of menu bar 2
-                click
-                click menu item "{layout_id}" of menu 1
-            end tell
-        end tell
-    end tell
-    '''
-    try:
-        result = subprocess.run(['osascript', '-e', script], capture_output=True, text=True)
-        return result.returncode == 0
-    except Exception:
+def switch_layout_tis(lang: str) -> bool:
+    """Switch input layout to the given language code ('ru', 'uk', 'en')."""
+    target_ids = _LANG_TO_IDS.get(lang)
+    if not target_ids:
         return False
 
-
-def switch_layout_tis(target: str = 'ru') -> bool:
-    """
-    Switches layout via TIS API (requires pyobjc).
-    target: 'ru' or 'en'
-    """
-    try:
-        from Carbon.framework import Carbon  # noqa: F401
-    except ImportError:
-        pass
+    carbon = _get_carbon()
+    if not carbon:
+        return False
 
     try:
-        import ctypes
-        import ctypes.util
-
-        carbon_path = ctypes.util.find_library('Carbon')
-        if not carbon_path:
-            return False
-
-        carbon = ctypes.cdll.LoadLibrary(carbon_path)
-
-        # Low-level approach via ctypes, works without code signing
-        carbon.TISCopyCurrentKeyboardInputSource.restype = ctypes.c_void_p
-        current = carbon.TISCopyCurrentKeyboardInputSource()
-
-        if target == 'ru':
-            layout_ids = [b'com.apple.keylayout.Russian', b'com.apple.keylayout.Russian-PC']
-        else:
-            layout_ids = [b'com.apple.keylayout.ABC', b'com.apple.keylayout.US']
-
-        # Get list of all input sources
-        carbon.TISCreateInputSourceList.restype = ctypes.c_void_p
+        prop_key = carbon.CFStringCreateWithCString(
+            None, b'TISPropertyInputSourceID', _kCFStringEncodingUTF8
+        )
         source_list = carbon.TISCreateInputSourceList(None, False)
+        count = carbon.CFArrayGetCount(source_list)
 
-        from CoreFoundation import CFArrayGetCount, CFArrayGetValueAtIndex, CFRelease
-        count = CFArrayGetCount(source_list)
         for i in range(count):
-            source = CFArrayGetValueAtIndex(source_list, i)
-            carbon.TISGetInputSourceProperty.restype = ctypes.c_void_p
-            # kTISPropertyInputSourceID = CFSTR("TISPropertyInputSourceID")
-            prop_id = carbon.TISGetInputSourceProperty(source, b'TISPropertyInputSourceID')
-            if prop_id:
-                from CoreFoundation import CFStringGetCString
-                buf = ctypes.create_string_buffer(256)
-                if CFStringGetCString(prop_id, buf, 256, 0x08000100):
-                    if buf.value in layout_ids:
-                        carbon.TISSelectInputSource(source)
-                        CFRelease(source_list)
-                        return True
+            source = carbon.CFArrayGetValueAtIndex(source_list, i)
+            prop = carbon.TISGetInputSourceProperty(source, prop_key)
+            if not prop:
+                continue
+            buf = ctypes.create_string_buffer(256)
+            if carbon.CFStringGetCString(prop, buf, 256, _kCFStringEncodingUTF8):
+                if buf.value in target_ids:
+                    carbon.TISSelectInputSource(source)
+                    carbon.CFRelease(source_list)
+                    carbon.CFRelease(prop_key)
+                    return True
 
-        CFRelease(source_list)
+        carbon.CFRelease(source_list)
+        carbon.CFRelease(prop_key)
         return False
     except Exception as e:
-        print(f'TIS switch failed: {e}')
+        print(f'Layout switch failed: {e}')
         return False
