@@ -1,7 +1,11 @@
 """
-Bigram-based language scorer.
-For short words (< 5 chars): checks against corpus-extracted frequent word list.
-For longer words: compares bigram log-probability scores.
+Language scorer: decides whether a word needs layout correction.
+
+Short words (≤ SHORT_WORD_MAX_LEN):
+  - RU/UK: pymorphy3 dictionary lookup (DictionaryAnalyzer only, no guesser).
+  - EN: corpus-extracted frequent word list (from data/bigrams.json).
+
+Long words: bigram log-probability comparison.
 
 Run build_bigrams.py once to generate data/bigrams.json.
 """
@@ -16,7 +20,18 @@ SHORT_WORD_MAX_LEN = 4
 THRESHOLD_PER_CHAR = 0.8
 
 _bigrams: dict[str, dict[str, float]] = {}
-_short_words: dict[str, set[str]] = {}
+_short_words: dict[str, set[str]] = {}  # used for EN only
+
+# pymorphy3 for RU/UK morphological dictionary lookup
+try:
+    import pymorphy3 as _pymorphy3
+    _morph_ru = _pymorphy3.MorphAnalyzer(lang='ru')
+    _morph_uk = _pymorphy3.MorphAnalyzer(lang='uk')
+    _morphs = {'ru': _morph_ru, 'uk': _morph_uk}
+    print('pymorphy3 loaded (RU + UK dictionaries)')
+except ImportError:
+    _morphs = {}
+    print('WARNING: pymorphy3 not installed. RU/UK short word detection will use corpus fallback.')
 
 
 def _load() -> None:
@@ -32,7 +47,6 @@ def _load() -> None:
             _bigrams[lang] = payload['bigrams']
             _short_words[lang] = set(payload.get('short_words', []))
         else:
-            # Legacy format (flat bigram dict)
             _bigrams[lang] = payload
 
     langs = ', '.join(_bigrams.keys())
@@ -56,23 +70,35 @@ def score(word: str, lang: str) -> float:
     return total
 
 
-def is_known_short_word(word: str, lang: str) -> bool:
-    return word.lower() in _short_words.get(lang, set())
+def is_known_word(word: str, lang: str) -> bool:
+    """Return True if word is a known word in the given language."""
+    word = word.lower()
+    morph = _morphs.get(lang)
+    if morph is not None:
+        parses = morph.parse(word)
+        for p in parses:
+            methods = [str(m[0].__class__.__name__) for m in p.methods_stack]
+            # Only trust a pure dictionary match — no guessers or prefix analyzers.
+            if methods == ['DictionaryAnalyzer']:
+                return True
+        return False
+    # EN (or fallback when pymorphy3 unavailable): use corpus word list
+    return word in _short_words.get(lang, set())
 
 
 def should_convert(original: str, converted: str, target_lang: str, source_lang: str) -> bool:
     """
     Returns True if original looks wrong in source_lang and converted looks right in target_lang.
-    Short words: check corpus-extracted word lists.
-    Long words: compare bigram scores.
+    Short words: dictionary lookup (pymorphy3 for RU/UK, corpus for EN).
+    Long words: bigram log-probability gain.
     """
     if len(original) < 1:
         return False
 
     if len(original) <= SHORT_WORD_MAX_LEN:
         return (
-            not is_known_short_word(original, source_lang)
-            and is_known_short_word(converted, target_lang)
+            not is_known_word(original, source_lang)
+            and is_known_word(converted, target_lang)
         )
 
     gain = score(converted, target_lang) - score(original, source_lang)

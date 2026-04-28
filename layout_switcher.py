@@ -53,6 +53,85 @@ def _get_carbon() -> ctypes.CDLL | None:
     return _carbon
 
 
+def keycode_to_char(keycode: int) -> str | None:
+    """Translate a keycode to a character using the currently active keyboard layout.
+
+    Uses TISCopyCurrentKeyboardInputSource + UCKeyTranslate, which is the same
+    mechanism the OS uses for text fields — always in sync with what the user sees.
+    """
+    carbon = _get_carbon()
+    if not carbon:
+        return None
+    try:
+        lib_path = ctypes.util.find_library('Carbon')
+        lib = ctypes.cdll.LoadLibrary(lib_path)
+
+        lib.TISCopyCurrentKeyboardInputSource.restype = ctypes.c_void_p
+        lib.TISCopyCurrentKeyboardInputSource.argtypes = []
+        lib.TISGetInputSourceProperty.restype = ctypes.c_void_p
+        lib.TISGetInputSourceProperty.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+        lib.CFDataGetBytePtr.restype = ctypes.c_void_p
+        lib.CFDataGetBytePtr.argtypes = [ctypes.c_void_p]
+        lib.UCKeyTranslate.restype = ctypes.c_int
+        lib.UCKeyTranslate.argtypes = [
+            ctypes.c_void_p,   # keyboardLayout
+            ctypes.c_uint16,   # virtualKeyCode
+            ctypes.c_uint16,   # keyAction
+            ctypes.c_uint32,   # modifierKeyState
+            ctypes.c_uint32,   # keyboardType
+            ctypes.c_uint32,   # keyTranslateOptions
+            ctypes.POINTER(ctypes.c_uint32),  # deadKeyState
+            ctypes.c_long,     # maxStringLength
+            ctypes.POINTER(ctypes.c_long),    # actualStringLength
+            ctypes.c_wchar_p,  # unicodeString
+        ]
+
+        prop_key = carbon.CFStringCreateWithCString(
+            None, b'TISPropertyUnicodeKeyLayoutData', _kCFStringEncodingUTF8
+        )
+        source = lib.TISCopyCurrentKeyboardInputSource()
+        if not source:
+            carbon.CFRelease(prop_key)
+            return None
+
+        layout_data = lib.TISGetInputSourceProperty(source, prop_key)
+        if not layout_data:
+            carbon.CFRelease(source)
+            carbon.CFRelease(prop_key)
+            return None
+
+        layout_ptr = lib.CFDataGetBytePtr(layout_data)
+        dead_key_state = ctypes.c_uint32(0)
+        actual_len = ctypes.c_long(0)
+        unicode_buf = ctypes.create_unicode_buffer(4)
+
+        kUCKeyActionDown = 0
+        kUCKeyTranslateNoDeadKeysBit = 0
+
+        lib.UCKeyTranslate(
+            layout_ptr,
+            keycode,
+            kUCKeyActionDown,
+            0,   # no modifiers
+            0,   # default keyboard type
+            kUCKeyTranslateNoDeadKeysBit,
+            ctypes.byref(dead_key_state),
+            4,
+            ctypes.byref(actual_len),
+            unicode_buf,
+        )
+
+        carbon.CFRelease(source)
+        carbon.CFRelease(prop_key)
+
+        length = actual_len.value
+        if length > 0:
+            return unicode_buf.value[:length]
+        return None
+    except Exception:
+        return None
+
+
 def switch_layout_tis(lang: str) -> bool:
     """Switch input layout to the given language code ('ru', 'uk', 'en')."""
     target_ids = _LANG_TO_IDS.get(lang)

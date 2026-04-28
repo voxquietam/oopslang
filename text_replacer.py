@@ -24,6 +24,10 @@ def replace_word(old_word: str, new_word: str) -> None:
 def _replace_via_pyobjc(delete_count: int, new_word: str) -> None:
     import Quartz
 
+    # Wait for the triggering space/separator event to be processed by the OS
+    # before we start deleting, to avoid race conditions.
+    time.sleep(0.05)
+
     src = Quartz.CGEventSourceCreate(Quartz.kCGEventSourceStateHIDSystemState)
 
     # Key code 51 = Backspace

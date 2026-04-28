@@ -53,3 +53,11 @@ def transliterate_to_en(text: str, lang: str) -> str:
     """Convert text from lang layout back to EN."""
     mapping = {v: k for k, v in LAYOUTS.get(lang, {}).items()}
     return ''.join(mapping.get(ch, ch) for ch in text)
+
+
+def transliterate_cross(text: str, from_lang: str, to_lang: str) -> str:
+    """Convert text typed in from_lang layout as if it were typed in to_lang layout.
+    E.g. Russian 'подыя' → QWERTY → Ukrainian 'подія'.
+    """
+    en = transliterate_to_en(text, from_lang)
+    return transliterate(en, to_lang)

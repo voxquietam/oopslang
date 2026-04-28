@@ -10,7 +10,7 @@ import threading
 import Quartz
 from word_detector import WordBuffer, SEPARATORS, PUNCTUATION
 from text_replacer import replace_word
-from layout_switcher import switch_layout_tis
+from layout_switcher import switch_layout_tis, keycode_to_char
 
 
 class KeyListener:
@@ -44,7 +44,11 @@ class KeyListener:
             Quartz.kCFRunLoopCommonModes,
         )
         Quartz.CGEventTapEnable(tap, True)
-        Quartz.CFRunLoopRun()
+        # Run loop in short intervals so Python can process signals (e.g. Ctrl+C) between ticks.
+        while True:
+            result = Quartz.CFRunLoopRunInMode(Quartz.kCFRunLoopDefaultMode, 0.5, False)
+            if result == Quartz.kCFRunLoopRunStopped:
+                break
 
     def stop(self) -> None:
         if self._tap:
@@ -61,7 +65,7 @@ class KeyListener:
             return event
 
         keycode = Quartz.CGEventGetIntegerValueField(event, Quartz.kCGKeyboardEventKeycode)
-        char = _keycode_to_char(event)
+        char = keycode_to_char(keycode) or _keycode_to_char(event)
 
         if char is None:
             return event
@@ -71,13 +75,20 @@ class KeyListener:
             needs_fix, correct_word, lang = self.word_buffer.check_wrong_layout()
             self.word_buffer.clear()
 
+            if word:
+                if needs_fix:
+                    print(f'[fix] {word!r} → {correct_word!r} ({lang})')
+                else:
+                    print(f'[skip] {word!r}')
+
             if needs_fix:
                 switch_layout_tis(lang)
-                threading.Thread(
-                    target=replace_word,
-                    args=(word, correct_word),
-                    daemon=True,
-                ).start()
+                if correct_word != word:
+                    threading.Thread(
+                        target=replace_word,
+                        args=(word, correct_word),
+                        daemon=True,
+                    ).start()
         elif char == '\x08' or keycode == 51:
             # Backspace — safe to call on empty buffer (no-op)
             self.word_buffer.pop()
@@ -85,6 +96,7 @@ class KeyListener:
             self.word_buffer.clear()
         else:
             self.word_buffer.push(char)
+            print(f'[buf] {char!r} → buffer: {self.word_buffer.word!r}')
 
         return event
 
