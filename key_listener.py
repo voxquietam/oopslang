@@ -137,26 +137,32 @@ class KeyListener:
             self.word_buffer.pop()
         elif char in PUNCTUATION or char.isdigit():
             word = self.word_buffer.word
-            needs_fix, correct_word, lang = self.word_buffer.check_wrong_layout()
-            self.word_buffer.clear()
-            if word and needs_fix:
-                print(f'[fix] {word!r} → {correct_word!r} ({lang})')
-                switch_layout_tis(lang)
-                if correct_word != word:
-                    trailing = char  # re-insert the punctuation after replacement
-                    def _do_replace_punct(old, new, trail):
-                        self._replacing.set()
-                        try:
-                            replace_word_with_suffix(old, new, trail)
-                        finally:
-                            self._replacing.clear()
-                    threading.Thread(
-                        target=_do_replace_punct,
-                        args=(word, correct_word, trailing),
-                        daemon=True,
-                    ).start()
-            elif word:
-                print(f'[skip] {word!r}')
+            if not word:
+                # Buffer is empty: punctuation might be a layout-mapped letter (e.g. '.' = ю).
+                # Add to buffer instead of discarding.
+                if char in PUNCTUATION:
+                    self.word_buffer.push(char)
+            else:
+                needs_fix, correct_word, lang = self.word_buffer.check_wrong_layout()
+                self.word_buffer.clear()
+                if needs_fix:
+                    print(f'[fix] {word!r} → {correct_word!r} ({lang})')
+                    switch_layout_tis(lang)
+                    if correct_word != word:
+                        trailing = char  # re-insert the punctuation after replacement
+                        def _do_replace_punct(old, new, trail):
+                            self._replacing.set()
+                            try:
+                                replace_word_with_suffix(old, new, trail)
+                            finally:
+                                self._replacing.clear()
+                        threading.Thread(
+                            target=_do_replace_punct,
+                            args=(word, correct_word, trailing),
+                            daemon=True,
+                        ).start()
+                else:
+                    print(f'[skip] {word!r}')
         else:
             self.word_buffer.push(char)
 
