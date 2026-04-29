@@ -139,15 +139,10 @@ class OopslangApp(rumps.App):
         self._toggle_item = rumps.MenuItem('Enabled', callback=self.toggle_active)
         self._toggle_item.state = True
 
-        self._login_item = rumps.MenuItem('Launch at Login', callback=self.toggle_login)
-        self._login_item.state = _login_agent_installed()
-
         self.menu = [
             self._toggle_item,
-            self._login_item,
             None,
-            rumps.MenuItem('Add Exception...', callback=self.add_exception),
-            rumps.MenuItem('Exceptions...', callback=self.show_exceptions),
+            rumps.MenuItem('Settings...', callback=self.open_settings),
             None,
             rumps.MenuItem('Quit', callback=self.quit_app),
         ]
@@ -165,47 +160,15 @@ class OopslangApp(rumps.App):
         sender.state = active
         self.title = 'Oopslang' if active else 'Oopslang (paused)'
 
-    def add_exception(self, _sender):
-        self._listener.pause_tap()
-        try:
-            word = _osascript_input(
-                title='Add Exception',
-                message='Word will never be auto-corrected:',
-            )
-        finally:
-            self._listener.resume_tap()
-            self._toggle_item.state = True
-
-        if word:
-            self._exceptions.add(word.lower())
-            exc_store.save(self._exceptions)
-            self._word_buffer.set_exceptions(self._exceptions)
-
-    def show_exceptions(self, _sender):
-        if not self._exceptions:
-            _osascript_alert('Exceptions', 'No exceptions added yet.')
-            return
-        self._listener.pause_tap()
-        try:
-            word = _osascript_choose(
-                title='Exceptions',
-                prompt='Select a word to remove:',
-                items=sorted(self._exceptions),
-            )
-        finally:
-            self._listener.resume_tap()
-            self._toggle_item.state = True
-        if word:
-            self._exceptions.discard(word)
-            exc_store.save(self._exceptions)
-            self._word_buffer.set_exceptions(self._exceptions)
-
-    def toggle_login(self, sender):
-        if _login_agent_installed():
-            _uninstall_login_agent()
-        else:
-            _install_login_agent()
-        sender.state = _login_agent_installed()
+    def open_settings(self, _sender):
+        from settings_window import open_settings
+        open_settings(
+            word_buffer=self._word_buffer,
+            listener=self._listener,
+            toggle_item=self._toggle_item,
+            exceptions=self._exceptions,
+            on_exceptions_change=lambda e: exc_store.save(e),
+        )
 
     def quit_app(self, _sender):
         self._listener.stop()
