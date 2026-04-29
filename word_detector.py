@@ -13,7 +13,7 @@ from scorer import should_convert, score, is_known_word, SHORT_WORD_MAX_LEN
 SEPARATORS = {' ', '\n', '\r', '\t'}
 # Only chars that cannot be part of a mistyped word.
 # Chars like ' , . ; are excluded because they map to Cyrillic letters (э, б, ю, ж).
-PUNCTUATION = {'!', '?', '-', '(', ')', '"'}
+PUNCTUATION = {'!', '?', '(', ')', '"'}
 
 # Characters exclusive to one Cyrillic language — strong layout signal.
 _LANG_EXCLUSIVE: dict[str, frozenset[str]] = {
@@ -57,14 +57,39 @@ class WordBuffer:
         Returns (needs_correction, correct_word, target_lang).
         Short words: first match wins.
         Long words: best scoring conversion wins.
+        Hyphenated words: each part checked independently; all parts must agree on lang.
         """
         word = self.word
         if not word:
             return False, '', ''
 
+        if '-' in word:
+            return self._check_hyphenated(word)
         if len(word) <= SHORT_WORD_MAX_LEN:
             return self._check_short(word)
         return self._check_long(word)
+
+    def _check_hyphenated(self, word: str) -> tuple[bool, str, str]:
+        parts = word.split('-')
+        results = []
+        for part in parts:
+            if not part:
+                results.append((False, part, ''))
+                continue
+            if len(part) <= SHORT_WORD_MAX_LEN:
+                r = self._check_short(part)
+            else:
+                r = self._check_long(part)
+            results.append(r)
+
+        # All convertible parts must agree on the target language.
+        langs = {r[2] for r in results if r[0]}
+        if not langs or len(langs) > 1:
+            return False, '', ''
+
+        target_lang = langs.pop()
+        converted_parts = [r[1] if r[0] else p for r, p in zip(results, parts)]
+        return True, '-'.join(converted_parts), target_lang
 
     def _check_short(self, word: str) -> tuple[bool, str, str]:
         candidates: list[tuple[float, str, str]] = []
@@ -99,6 +124,17 @@ class WordBuffer:
                         candidates.append((score(converted, to_lang), converted, to_lang))
 
         if candidates:
+            _lang_priority = {'ru': 0, 'uk': 1, 'en': 2}
+            # Deduplicate: same converted word in multiple langs → keep highest-priority lang.
+            best_per_word: dict[str, tuple[float, str, str]] = {}
+            for sc, w, lang in candidates:
+                if w not in best_per_word:
+                    best_per_word[w] = (sc, w, lang)
+                else:
+                    existing = best_per_word[w]
+                    if _lang_priority.get(lang, 9) < _lang_priority.get(existing[2], 9):
+                        best_per_word[w] = (sc, w, lang)
+            candidates = list(best_per_word.values())
             candidates.sort(key=lambda x: x[0], reverse=True)
             _, best_word, best_lang = candidates[0]
             return True, best_word, best_lang
