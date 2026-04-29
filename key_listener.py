@@ -67,7 +67,6 @@ class KeyListener:
         src_pid = Quartz.CGEventGetIntegerValueField(event, Quartz.kCGEventSourceUnixProcessID)
         if src_pid == _OUR_PID:
             return event
-        _dbg_src_pid = src_pid
 
         # Ignore Cmd+key combinations (e.g. user's own Cmd+V paste)
         flags = Quartz.CGEventGetFlags(event)
@@ -138,8 +137,6 @@ class KeyListener:
                 print(f'[skip] {word!r}')
         else:
             self.word_buffer.push(char)
-            replacing = self._replacing.is_set()
-            print(f'[buf] {char!r} → buffer: {self.word_buffer.word!r}  pid={_dbg_src_pid} replacing={replacing}')
 
         return event
 

@@ -80,7 +80,7 @@ class WordBuffer:
                 results.append((False, part, ''))
                 continue
             if len(part) <= SHORT_WORD_MAX_LEN:
-                r = self._check_short(part, allow_particles=True)
+                r = self._check_short(part)
             else:
                 r = self._check_long(part, allow_particles=True)
             results.append(r)
@@ -94,7 +94,7 @@ class WordBuffer:
         converted_parts = [r[1] if r[0] else p for r, p in zip(results, parts)]
         return True, '-'.join(converted_parts), target_lang
 
-    def _check_short(self, word: str, allow_particles: bool = False) -> tuple[bool, str, str]:
+    def _check_short(self, word: str) -> tuple[bool, str, str]:
         candidates: list[tuple[float, str, str]] = []
 
         for lang in _LANGS:
@@ -178,11 +178,11 @@ class WordBuffer:
                     if converted == word:
                         continue
                     if (should_convert(word, converted, to_lang, from_lang)
-                            and is_known_word(converted, to_lang)):
+                            and is_known_word(converted, to_lang, allow_particles)):
                         gain = score(converted, to_lang) - score(word, from_lang)
                         if gain > best_gain:
                             best_gain, best_word, best_lang = gain, converted, to_lang
-                    elif not best_word and is_known_word(converted, to_lang):
+                    elif not best_word and is_known_word(converted, to_lang, allow_particles):
                         if (not is_known_word(word, from_lang)
                                 or _LANG_EXCLUSIVE['ru'].intersection(converted)):
                             # Dictionary confirms target, or converted has RU-exclusive chars.
@@ -191,15 +191,15 @@ class WordBuffer:
         if best_word:
             # Dictionary tiebreak: if bigrams picked lang X but only lang Y's dictionary
             # knows the word, prefer Y (e.g. насамперед: bigrams→ru, dict→uk).
-            if best_lang in _LANGS and not is_known_word(best_word, best_lang):
+            if best_lang in _LANGS and not is_known_word(best_word, best_lang, allow_particles):
                 for lang in _LANGS:
-                    if lang != best_lang and is_known_word(best_word, lang):
+                    if lang != best_lang and is_known_word(best_word, lang, allow_particles):
                         return True, best_word, lang
             return True, best_word, best_lang
 
         # Vocabulary check: word is already Cyrillic but known only in one language.
         # Switch layout without replacing text (e.g. насамперед typed in RU layout).
-        known_in = [l for l in _LANGS if is_known_word(word, l)]
+        known_in = [l for l in _LANGS if is_known_word(word, l, allow_particles)]
         if len(known_in) == 1:
             return True, word, known_in[0]
 
