@@ -4,6 +4,7 @@ Layout switching via TIS (Text Input Source) API using pure ctypes.
 
 import ctypes
 import ctypes.util
+import threading
 
 _carbon = None
 _prop_key_layout_data = None   # cached CFString for TISPropertyUnicodeKeyLayoutData
@@ -131,8 +132,39 @@ def keycode_to_char(keycode: int) -> str | None:
         return None
 
 
-def switch_layout_tis(lang: str) -> bool:
-    """Switch input layout to the given language code ('ru', 'uk', 'en')."""
+def switch_layout_tis(lang: str) -> None:
+    """Switch input layout to the given language code ('ru', 'uk', 'en').
+
+    TISSelectInputSource must be called from the main thread.
+    If called from a background thread, dispatches to main thread synchronously.
+    """
+    if threading.current_thread() is not threading.main_thread():
+        _dispatch_to_main(lang)
+        return
+    _switch_layout_tis_main(lang)
+
+
+def _dispatch_to_main(lang: str) -> None:
+    """Dispatch layout switch to main thread via PyObjC NSObject mechanism."""
+    try:
+        from Foundation import NSObject
+        import objc
+
+        class _Switcher(NSObject):
+            def switchLayout_(self, lang_str):
+                _switch_layout_tis_main(lang_str)
+
+        switcher = _Switcher.alloc().init()
+        switcher.performSelectorOnMainThread_withObject_waitUntilDone_(
+            b'switchLayout:', lang, True
+        )
+    except Exception as e:
+        print(f'[layout] main thread dispatch failed ({e}), calling directly')
+        _switch_layout_tis_main(lang)
+
+
+def _switch_layout_tis_main(lang: str) -> bool:
+    """Internal: must be called from main thread."""
     target_ids = _LANG_TO_IDS.get(lang)
     if not target_ids:
         return False

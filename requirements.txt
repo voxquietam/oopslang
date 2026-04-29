@@ -2,3 +2,4 @@ pyobjc-core
 pyobjc-framework-Cocoa
 pyobjc-framework-Quartz
 pymorphy3
+rumps

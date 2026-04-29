@@ -2,7 +2,7 @@
 Global keyboard event listener via CGEventTap (Core Graphics).
 Requires Accessibility permission: System Settings -> Privacy & Security -> Accessibility.
 
-Must be run on the main thread so that TISSelectInputSource works correctly.
+Runs in a background thread; layout switching is dispatched to main thread internally.
 """
 
 import os
@@ -21,6 +21,15 @@ class KeyListener:
         self.word_buffer = word_buffer
         self._tap = None
         self._replacing = threading.Event()
+        self._active = True
+
+    def is_active(self) -> bool:
+        return self._active
+
+    def set_active(self, active: bool) -> None:
+        self._active = active
+        if not active:
+            self.word_buffer.clear()
 
     def run(self) -> None:
         """Start listening. Blocks the calling thread (must be main thread)."""
@@ -81,8 +90,8 @@ class KeyListener:
         if char is None:
             return event
 
-        # Ignore all key events while replacement is in progress.
-        if self._replacing.is_set():
+        # Pass through all events when paused or replacement is in progress.
+        if not self._active or self._replacing.is_set():
             return event
 
         if char in SEPARATORS:
