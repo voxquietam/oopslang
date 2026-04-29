@@ -38,8 +38,12 @@ def _has_cyrillic(word: str) -> bool:
 
 
 class WordBuffer:
-    def __init__(self):
+    def __init__(self, exceptions: set[str] | None = None):
         self._buffer: list[str] = []
+        self._exceptions: set[str] = exceptions or set()
+
+    def set_exceptions(self, exceptions: set[str]) -> None:
+        self._exceptions = exceptions
 
     def push(self, char: str) -> None:
         self._buffer.append(char)
@@ -64,6 +68,9 @@ class WordBuffer:
         """
         word = self.word
         if not word:
+            return False, '', ''
+
+        if word.lower() in self._exceptions:
             return False, '', ''
 
         if '-' in word:

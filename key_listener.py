@@ -31,6 +31,19 @@ class KeyListener:
         if not active:
             self.word_buffer.clear()
 
+    def pause_tap(self) -> None:
+        """Physically disable the event tap so events bypass it entirely."""
+        self._active = False
+        self.word_buffer.clear()
+        if self._tap:
+            Quartz.CGEventTapEnable(self._tap, False)
+
+    def resume_tap(self) -> None:
+        """Re-enable the event tap."""
+        if self._tap:
+            Quartz.CGEventTapEnable(self._tap, True)
+        self._active = True
+
     def run(self) -> None:
         """Start listening. Blocks the calling thread (must be main thread)."""
         tap = Quartz.CGEventTapCreate(

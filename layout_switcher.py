@@ -147,20 +147,28 @@ def switch_layout_tis(lang: str) -> None:
 def _dispatch_to_main(lang: str) -> None:
     """Dispatch layout switch to main thread via PyObjC NSObject mechanism."""
     try:
-        from Foundation import NSObject
-        import objc
-
-        class _Switcher(NSObject):
-            def switchLayout_(self, lang_str):
-                _switch_layout_tis_main(lang_str)
-
-        switcher = _Switcher.alloc().init()
-        switcher.performSelectorOnMainThread_withObject_waitUntilDone_(
+        _switcher.performSelectorOnMainThread_withObject_waitUntilDone_(
             b'switchLayout:', lang, True
         )
     except Exception as e:
         print(f'[layout] main thread dispatch failed ({e}), calling directly')
         _switch_layout_tis_main(lang)
+
+
+def _init_switcher():
+    from Foundation import NSObject
+
+    class _Switcher(NSObject):
+        def switchLayout_(self, lang_str):
+            _switch_layout_tis_main(lang_str)
+
+    return _Switcher.alloc().init()
+
+
+try:
+    _switcher = _init_switcher()
+except Exception:
+    _switcher = None
 
 
 def _switch_layout_tis_main(lang: str) -> bool:
