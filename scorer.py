@@ -22,6 +22,13 @@ THRESHOLD_PER_CHAR = 0.8
 _bigrams: dict[str, dict[str, float]] = {}
 _short_words: dict[str, set[str]] = {}  # used for EN only
 
+# Particles and suffixes that pymorphy3 doesn't know as standalone words
+# but are valid as parts of hyphenated compounds.
+_PARTICLE_WHITELIST: dict[str, set[str]] = {
+    'ru': {'нибудь', 'либо', 'ка', 'таки', 'то'},
+    'uk': {'небудь', 'будь', 'то', 'таки'},
+}
+
 # pymorphy3 for RU/UK morphological dictionary lookup
 try:
     import pymorphy3 as _pymorphy3
@@ -70,9 +77,11 @@ def score(word: str, lang: str) -> float:
     return total
 
 
-def is_known_word(word: str, lang: str) -> bool:
+def is_known_word(word: str, lang: str, allow_particles: bool = False) -> bool:
     """Return True if word is a known word in the given language."""
     word = word.lower()
+    if allow_particles and word in _PARTICLE_WHITELIST.get(lang, set()):
+        return True
     morph = _morphs.get(lang)
     if morph is not None:
         parses = morph.parse(word)

@@ -7,6 +7,16 @@ import time
 import subprocess
 
 
+def replace_word_with_suffix(old_word: str, new_word: str, suffix: str) -> None:
+    """Like replace_word but triggered by punctuation: delete word+suffix, paste new_word+suffix."""
+    delete_count = len(old_word) + len(suffix)
+    try:
+        _replace_via_pyobjc(delete_count, new_word, trailing=suffix)
+    except Exception as e:
+        print(f'[replace] pyobjc failed ({e}), using applescript fallback')
+        _replace_via_applescript(delete_count, new_word + suffix)
+
+
 def replace_word(old_word: str, new_word: str) -> None:
     """
     Delete old_word (via backspaces) and type new_word.
@@ -22,7 +32,7 @@ def replace_word(old_word: str, new_word: str) -> None:
         _replace_via_applescript(delete_count, new_word)
 
 
-def _replace_via_pyobjc(delete_count: int, new_word: str) -> None:
+def _replace_via_pyobjc(delete_count: int, new_word: str, trailing: str = ' ') -> None:
     import Quartz
 
     # Wait for the triggering space/separator event to be processed by the OS
@@ -39,8 +49,8 @@ def _replace_via_pyobjc(delete_count: int, new_word: str) -> None:
         Quartz.CGEventPost(Quartz.kCGAnnotatedSessionEventTap, down)
         Quartz.CGEventPost(Quartz.kCGAnnotatedSessionEventTap, up)
 
-    # Paste the corrected word + space via clipboard
-    _paste_text(new_word + ' ')
+    # Paste the corrected word + trailing char via clipboard
+    _paste_text(new_word + trailing)
 
 
 def _paste_text(text: str) -> None:
