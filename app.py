@@ -57,6 +57,24 @@ def _osascript_alert(title: str, message: str, buttons: list[str] | None = None)
     return ''
 
 
+def _osascript_choose(title: str, prompt: str, items: list[str]) -> str | None:
+    """Show a native list picker. Returns selected item or None if cancelled."""
+    items_osa = '{' + ', '.join(_osa_str(i) for i in items) + '}'
+    script = (
+        f'choose from list {items_osa} '
+        f'with title {_osa_str(title)} '
+        f'with prompt {_osa_str(prompt)} '
+        f'OK button name "Remove" '
+        f'cancel button name "Cancel" '
+        f'multiple selections allowed false'
+    )
+    result = subprocess.run(['osascript', '-e', script], capture_output=True, text=True)
+    if result.returncode != 0:
+        return None
+    out = result.stdout.strip()
+    return out if out and out != 'false' else None
+
+
 def _osa_str(s: str) -> str:
     """Escape a string for AppleScript."""
     return '"' + s.replace('\\', '\\\\').replace('"', '\\"') + '"'
@@ -111,7 +129,8 @@ def _uninstall_login_agent() -> None:
 
 class OopslangApp(rumps.App):
     def __init__(self):
-        super().__init__('Oopslang', quit_button=None)
+        icon_path = str(Path(__file__).parent / 'icon.png')
+        super().__init__('', icon=icon_path, template=True, quit_button=None)
 
         self._exceptions = exc_store.load()
         self._word_buffer = WordBuffer(exceptions=self._exceptions)
@@ -166,12 +185,18 @@ class OopslangApp(rumps.App):
         if not self._exceptions:
             _osascript_alert('Exceptions', 'No exceptions added yet.')
             return
-        lines = '\n'.join(sorted(self._exceptions))
-        clicked = _osascript_alert(
-            'Exceptions', lines, buttons=['Clear All', 'Close']
-        )
-        if clicked == 'Clear All':
-            self._exceptions.clear()
+        self._listener.pause_tap()
+        try:
+            word = _osascript_choose(
+                title='Exceptions',
+                prompt='Select a word to remove:',
+                items=sorted(self._exceptions),
+            )
+        finally:
+            self._listener.resume_tap()
+            self._toggle_item.state = True
+        if word:
+            self._exceptions.discard(word)
             exc_store.save(self._exceptions)
             self._word_buffer.set_exceptions(self._exceptions)
 
